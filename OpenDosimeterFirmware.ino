@@ -1161,7 +1161,8 @@ void setup1() {
 
   // Define an array of CommandInfo objects with function pointers and descriptions
   CommandInfo allCommands[] = {
-    { printDataLogToSerial, "P", "Print the dose data log" }
+    { printDataLogToSerial, "P", "Print the dose data log" },
+    { printSpectrumLogToSerial, "S", "Print the current spectrum to serial" }
   };
 
   // Get the number of allCommands
@@ -1966,6 +1967,18 @@ void truncateDataLogFile() {
   }
 }
 
+void printSpectrumLogToSerial([[maybe_unused]] String *args) {
+  // Messsage to indicate the start of the spectrum log
+  Serial.println("---Spectrum Log Start");
+  // Print the current spectrum from the global variable 'spectrum'
+  Serial.println("ADC_BIN,COUNT");
+  for (uint16_t i = 0; i < ADC_BINS; ++i) {
+    Serial.print(i);
+    Serial.print(",");
+    Serial.println(spectrum[i]);
+  }
+  Serial.println("---Spectrum Log End");
+}
 
 void printDataLogToSerial([[maybe_unused]] String *args) {
   File dataFile = LittleFS.open("/datalog.csv", "r");
