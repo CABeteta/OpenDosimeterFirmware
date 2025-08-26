@@ -1513,9 +1513,16 @@ void calibrateSpectrum(){
   display.display();
 
   // Copy over to a local variable for further processing
+  char temp_buf[20];
+  Serial.println("========Recorded spectrum:");
   for (uint16_t i = 0; i < ADC_BINS; i++) {
       am241_spectrum[i] = display_spectrum[i];
+      // Print the whole ADC spectrum on Serial (for debugging)
+      sprintf(temp_buf, "%04d:%03d, ", i, am241_spectrum[i]); // It will be a large blob, 4096 values of "xxxx:xxx, "
+      Serial.print(temp_buf);
   }
+  Serial.println("");
+  Serial.println("=========End of spectrum");
 
   // Now detect the Am-241 peaks in the spectrum and perform energy calibration
   calibration_success = detectPeaksAndCalibrate(am241_spectrum);
