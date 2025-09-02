@@ -129,9 +129,9 @@ const uint16_t OUT_REFRESH = 1000;  // Milliseconds between serial data outputs
 const uint8_t LONG_PRESS = 10;  // Number of timesteps (100 ms) until considered long button press.
 
 const uint16_t TIMEOUT_CALIBRATION_MENU = 4000;  // Milliseconds to exit the calibration mode with no user interaction. Needs to be shorter than the watchdog timer (5s currently)
-const uint16_t TIMEOUT_CALIBRATION = 60000; // Milliseconds for recording Am-241 spectrum, after which the calibration exits without finishing
+const uint32_t TIMEOUT_CALIBRATION = 60000; // Milliseconds for recording Am-241 spectrum, after which the calibration exits without finishing
 const uint8_t AVERAGING_WINDOW = 64;            // Size of the moving average window for spectral calibration (needs to be even number)
-const uint8_t MAX_CALIBRATION_COUNTS = 50;      // Breakpoint for calibration, max collected counts for a certain bin
+const uint8_t MAX_CALIBRATION_COUNTS = 20;      // Breakpoint for calibration, max collected counts for a certain bin
 
 const uint8_t DOSE_DAILY_LIMIT = 100;    // [uSv] display daily limit for reference in the accumulated dose state
 const uint8_t DOSE_RATE_WARNING = 5;  //[uSv/h] Real-time audible warning at set dose rate
