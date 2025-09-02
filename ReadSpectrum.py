@@ -1,12 +1,30 @@
 import os
+import sys
 import datetime
 
-def ReadTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5):
+def get_default_port():
+    if sys.platform.startswith("win"):
+        return "COM3"  # Or prompt user for correct COM port
+    else:
+        return "/dev/ttyACM0"
+
+def ReadTTY(port=None, baudrate=9600, timeout=5):
     import serial
     import psutil
+    if port is None:
+        port = get_default_port()
     spectrum = []
-    if not os.path.exists(port):
-        raise FileNotFoundError(f"Serial port {port} not found.")
+    if sys.platform.startswith("win"):
+        # On Windows, os.path.exists does not work for COM ports
+        # Try opening the port and catch exceptions
+        try:
+            ser = serial.Serial(port, baudrate, timeout=timeout)
+            ser.close()
+        except serial.SerialException:
+            raise FileNotFoundError(f"Serial port {port} not found or cannot be opened.")
+    else:
+        if not os.path.exists(port):
+            raise FileNotFoundError(f"Serial port {port} not found.")
     for proc in psutil.process_iter(['pid', 'name', 'open_files']):
         try:
             files = proc.info['open_files']
