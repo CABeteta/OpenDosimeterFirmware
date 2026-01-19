@@ -94,7 +94,7 @@ struct Config {
     =================
 */
 
-const String FW_VERSION = "1.0.1";  // Firmware Version Code
+const String FW_VERSION = "1.0.1.L1";  // Firmware Version Code
 
 const uint8_t GND_PIN = A2;    // GND meas pin
 const uint8_t VSYS_MEAS = A3;  // VSYS/3

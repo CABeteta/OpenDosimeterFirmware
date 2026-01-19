@@ -1,0 +1,4 @@
+DearPyGui
+matplotlib
+pyserial
+psutil
