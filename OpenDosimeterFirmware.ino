@@ -94,7 +94,7 @@ struct Config {
     =================
 */
 
-const String FW_VERSION = "1.0.1.L1";  // Firmware Version Code
+const String FW_VERSION = "1.0.1.L4";  // Firmware Version Code
 
 const uint8_t GND_PIN = A2;    // GND meas pin
 const uint8_t VSYS_MEAS = A3;  // VSYS/3
@@ -218,6 +218,12 @@ volatile bool adc_lock = false;  // Locks the ADC if it's currently in use
 // Stores 5 * DISPLAY_REFRESH worth of "current" cps to calculate an average cps value in a ring buffer config
 RunningMedian counts(1);
 
+float cps = 0.0;  // Counts per second
+bool print_cps = false;  // Flag to toggle printing cps every second
+
+uint32_t last_total_events = 0;  // Last total events count for CPS calculation
+unsigned long last_cps_time = 0;  // Last time CPS was updated
+
 // Stores the last deadtime values
 RunningMedian dead_time(100);
 
@@ -264,12 +270,14 @@ void updateDisplay();
 void dataOutput();
 void updateBaseline();
 void resetPHCircuit();
+void updateCPS();
 //void recordCycle();
 
 // Tasks
 Task writeDebugFileTimeTask(60 * 60 * 1000, TASK_FOREVER, &writeDebugFileTime);
 Task queryButtonTask(100, TASK_FOREVER, &queryButton);
 Task updateDisplayTask(DISPLAY_REFRESH, TASK_FOREVER, &updateDisplay);
+Task cpsUpdateTask(1000, TASK_FOREVER, &updateCPS);
 Task dataOutputTask(OUT_REFRESH, TASK_FOREVER, &dataOutput);
 Task updateBaselineTask(1, TASK_FOREVER, &updateBaseline);
 Task resetPHCircuitTask(1, TASK_FOREVER, &resetPHCircuit);
@@ -655,6 +663,21 @@ void updateDisplay() {
   // Update display every DISPLAY_REFRESH ms
   if (conf.enable_display) {
     conf.geiger_mode ? drawAccumulatedDose() : drawDoseRate();
+  }
+}
+
+void updateCPS() {
+  // Update CPS based on total events
+  unsigned long now = millis();
+  unsigned long delta = now - last_cps_time;
+  uint32_t new_counts = total_events - last_total_events;
+  cps = new_counts * 1000.0 / delta;
+  last_total_events = total_events;
+  last_cps_time = now;
+
+  // Print cps if enabled
+  if (print_cps) {
+    Serial.println(cps);
   }
 }
 
@@ -1127,6 +1150,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(INT_PIN), eventInt, FALLING);
 
   start_time = millis();  // Spectrum pulse collection has started
+  last_cps_time = millis();  // Initialize CPS update time
 }
 
 
@@ -1162,7 +1186,9 @@ void setup1() {
   // Define an array of CommandInfo objects with function pointers and descriptions
   CommandInfo allCommands[] = {
     { printDataLogToSerial, "P", "Print the dose data log" },
-    { printSpectrumLogToSerial, "S", "Print the current spectrum to serial" }
+    { printSpectrumLogToSerial, "S", "Print the current spectrum to serial" },
+    { resetSpectrumCommand, "R", "Reset the spectrum to zeroes" },
+    { toggleCpsPrint, "C", "Toggle printing counts per second every second" }
   };
 
   // Get the number of allCommands
@@ -1243,11 +1269,11 @@ void setup1() {
   if (conf.enable_display) {
     bool begin = false;
 
-#if (SCREEN_TYPE == SCREEN_SSD1306)
-    begin = display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
-#elif (SCREEN_TYPE == SCREEN_SH1106)
-    begin = display.begin(SCREEN_ADDRESS, true);
-#endif
+    #if (SCREEN_TYPE == SCREEN_SSD1306)
+        begin = display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+    #elif (SCREEN_TYPE == SCREEN_SH1106)
+        begin = display.begin(SCREEN_ADDRESS, true);
+    #endif
 
     if (!begin) {
       println("Failed communication with the display. Maybe the I2C address is incorrect?", true);
@@ -1287,6 +1313,7 @@ void setup1() {
   schedule.addTask(writeDebugFileTimeTask);
   schedule.addTask(queryButtonTask);
   schedule.addTask(updateDisplayTask);
+  schedule.addTask(cpsUpdateTask);
   schedule.addTask(dataOutputTask);
   schedule.addTask(updateBaselineTask);
   schedule.addTask(resetPHCircuitTask);
@@ -1297,6 +1324,7 @@ void setup1() {
   updateBaselineTask.enable();
   writeDebugFileTimeTask.enableDelayed(60 * 60 * 1000);
   dataOutputTask.enableDelayed(OUT_REFRESH);
+  cpsUpdateTask.enableDelayed(1000);
 
   if (conf.enable_display) {
     // Only enable display task if the display function is enabled
@@ -1987,6 +2015,19 @@ void printSpectrumLogToSerial([[maybe_unused]] String *args) {
   Serial.println("---Spectrum Log End");
 }
 
+void resetSpectrumCommand([[maybe_unused]] String *args) {
+  clearSpectrum();
+}
+
+void toggleCpsPrint([[maybe_unused]] String *args) {
+  print_cps = !print_cps;
+  if (print_cps) {
+    Serial.println("CPS printing enabled");
+  } else {
+    Serial.println("CPS printing disabled");
+  }
+}
+
 void printDataLogToSerial([[maybe_unused]] String *args) {
   File dataFile = LittleFS.open("/datalog.csv", "r");
   if (dataFile) {
@@ -2035,3 +2076,4 @@ void loadDoseData() {
     min_dose_rate = -1;
   }
 }
+
