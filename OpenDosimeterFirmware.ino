@@ -94,7 +94,7 @@ struct Config {
     =================
 */
 
-const String FW_VERSION = "1.0.1.L4";  // Firmware Version Code
+const String FW_VERSION = "1.0.1.L5";  // Firmware Version Code
 
 const uint8_t GND_PIN = A2;    // GND meas pin
 const uint8_t VSYS_MEAS = A3;  // VSYS/3
@@ -666,7 +666,8 @@ void updateDisplay() {
   }
 }
 
-void updateCPS() {
+
+/*void updateCPS() {
   // Update CPS based on total events
   unsigned long now = millis();
   unsigned long delta = now - last_cps_time;
@@ -678,6 +679,31 @@ void updateCPS() {
   // Print cps if enabled
   if (print_cps) {
     Serial.println(cps);
+  }
+}
+*/
+
+void updateCPS() {
+  // Update CPS based on total events
+  unsigned long now = millis();
+  unsigned long delta = now - last_cps_time; // Time difference in milliseconds
+  last_cps_time = now;
+  if (delta <= 0) return; // Catch overflow in millis(), should not happen often, so just return
+
+  uint32_t new_counts = total_events - last_total_events;
+  cps = new_counts * 1000.0 / delta;
+  last_total_events = total_events;
+
+  // Compute the percentage of deadtime
+  // Absolute deadtime approximated as average deadtime times the increase in counts
+  float abs_deadtime = dead_time.getAverage() * (float) new_counts / 1000.0;  // Absolute deadtime in milliseconds
+  float deadtime_percentage = (abs_deadtime / delta) * 100.0; // Deadtime percentage
+
+  // Print cps and deadtime percentage if enabled
+  if (print_cps) {
+    Serial.print(cps);
+    Serial.print(" ");
+    Serial.println(deadtime_percentage, 2);
   }
 }
 
