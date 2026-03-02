@@ -6,6 +6,23 @@ import psutil
 import matplotlib.pyplot as plt
 import numpy as np
 
+def WriteTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5, data="Hello, Raspberry Pi!"):
+    if not os.path.exists(port):
+        raise FileNotFoundError(f"Serial port {port} not found.")
+    for proc in psutil.process_iter(['pid', 'name', 'open_files']):
+        try:
+            files = proc.info['open_files']
+            if files:
+                for f in files:
+                    if f.path == port:
+                        raise RuntimeError(f"Serial port {port} is already in use by process {proc.info['name']} (PID {proc.info['pid']}).")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    with serial.Serial(port, baudrate, timeout=timeout) as ser:
+        ser.write(data.encode())
+        print(f"Data written to {port}: {data}")
+        
+
 def ReadTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5):
     spectrum = []
     if not os.path.exists(port):

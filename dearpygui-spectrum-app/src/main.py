@@ -1,9 +1,23 @@
 import dearpygui.dearpygui as dpg
 import datetime
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY, WriteTTY
 
 spectrum_data = []
 smoothed_data = []
+
+def reset_spectrum_callback():
+    print("Resetting spectrum data...")
+
+    try:
+        port=FindRaspberryPiTTY()
+        print(f"Raspberry Pi TTY port found: {port}")
+        if not port:
+            dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
+            return
+        WriteTTY(port=port, data="R\n")
+        dpg.set_value("status_text", "Spectrum reset command sent to TTY.")
+    except Exception as e:
+        dpg.set_value("status_text", f"Error: {str(e)}")
 
 
 def read_spectrum_callback():
@@ -87,6 +101,7 @@ def setup_ui():
             dpg.add_button(label="Load Spectrum", callback=load_spectrum_callback)
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
             dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
+            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback)
         dpg.add_text("", tag="status_text")
         with dpg.child_window(width=900, height=600, tag="plot_child"):
             with dpg.plot(label="Spectrum Plot", tag="plot", width=860, height=560):
