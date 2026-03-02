@@ -104,3 +104,50 @@ def PlotSpectrumSingle(spectrum, smoothed):
     plt.xlim(0, 4096)
     plt.tight_layout()
     plt.show()
+
+def FindRaspberryPiTTY():
+    print("ENTERED FindRaspberryPiTTY")
+    
+    """
+    Find the TTY port of a connected Raspberry Pi device.
+    
+    Returns:
+        str: The port name (e.g., '/dev/ttyACM0', '/dev/ttyUSB0'). Returns None if not found.
+    
+    Raises:
+        ImportError: If pyserial is not installed.
+    """
+    try:
+        from serial.tools import list_ports
+    except ImportError:
+        raise ImportError("pyserial is required. Install it with: pip install pyserial")
+    
+    # Common Raspberry Pi identifiers
+    rpi_identifiers = [
+        'Raspberry Pi',
+        'Pico',
+        'CH340',  # Common USB-UART chip used with Pi
+        'CP210x',  # Another common USB-UART chip
+        'FTDI',  # FTDI chips sometimes used
+        'arduino',  # Arduino-compatible RPi boards
+    ]
+    
+    ports = list_ports.comports()
+    
+    for port in ports:
+        # Check if port description contains Raspberry Pi identifiers
+        desc_lower = (port.description or '').lower()
+        manufacturer_lower = (port.manufacturer or '').lower()
+        
+        for identifier in rpi_identifiers:
+            if identifier.lower() in desc_lower or identifier.lower() in manufacturer_lower:
+                print(port.device)
+                return port.device
+    
+    # If no specific identifier found, return the first available serial port
+    # (commonly /dev/ttyACM0 or /dev/ttyUSB0 for Raspberry Pi Pico/boards)
+    if ports:
+        print("here")
+        return ports[0].device     
+    
+    return None

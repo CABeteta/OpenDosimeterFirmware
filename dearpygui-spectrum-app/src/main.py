@@ -1,15 +1,23 @@
 import dearpygui.dearpygui as dpg
 import datetime
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY
 
 spectrum_data = []
 smoothed_data = []
 
 
 def read_spectrum_callback():
+    print("Reading spectrum data from TTY...")
     global spectrum_data, smoothed_data
     try:
-        spectrum_data = ReadTTY()
+
+        port = FindRaspberryPiTTY()
+        print(f"Raspberry Pi TTY port found: {port}")
+        
+        if not port:
+            dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
+            return
+        spectrum_data = ReadTTY(port=port)
         smoothed_data = SmoothSpectrum(spectrum_data, window_size=20)
         for i in range(10):
             spectrum_data[i] = 0
@@ -94,9 +102,9 @@ def setup_ui():
             show=False,  # Initially hidden
             width=700,
             height=500,
-            default_path=".",  # Path to open (current directory)
-            file_count=1,  # Number of files that can be selected
-            file_extensions=[".txt", ".py", ".md", "*.*"]  # Specify file types (you can add more extensions)
+            default_path="."  # Path to open (current directory)
+            # file_count=1,  # Number of files that can be selected
+            # file_extensions=[".txt", ".py", ".md", "*.*"]  # Specify file types (you can add more extensions)
         )
     
     # Set up viewport resize callback
