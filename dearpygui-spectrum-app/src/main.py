@@ -1,9 +1,13 @@
 import dearpygui.dearpygui as dpg
 import datetime
+import threading
+import time
 from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY, WriteTTY
 
 spectrum_data = []
 smoothed_data = []
+auto_read_enabled = False
+auto_read_thread = None
 
 def reset_spectrum_callback():
     print("Resetting spectrum data...")
@@ -83,6 +87,22 @@ def file_dialog_callback(sender, app_data):
 def load_spectrum_callback():
     dpg.show_item("file_dialog_id")
 
+def auto_read_loop():
+    while auto_read_enabled:
+        read_spectrum_callback()
+        plot_spectrum_callback()
+        time.sleep(3)
+
+def toggle_auto_read_callback(sender, value):
+    global auto_read_enabled, auto_read_thread
+    auto_read_enabled = value
+    if value:
+        dpg.set_value("status_text", "Auto-read enabled (3 second interval).")
+        auto_read_thread = threading.Thread(target=auto_read_loop, daemon=True)
+        auto_read_thread.start()
+    else:
+        dpg.set_value("status_text", "Auto-read disabled.")
+
 def resize_callback(sender, app_data):
     # Get new viewport size
     width, height = dpg.get_viewport_client_width(), dpg.get_viewport_client_height()
@@ -102,6 +122,7 @@ def setup_ui():
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
             dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
             dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback)
+            dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback)
         dpg.add_text("", tag="status_text")
         with dpg.child_window(width=900, height=600, tag="plot_child"):
             with dpg.plot(label="Spectrum Plot", tag="plot", width=860, height=560):
