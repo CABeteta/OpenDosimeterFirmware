@@ -2,18 +2,22 @@ import dearpygui.dearpygui as dpg
 import datetime
 import threading
 import time
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY, WriteTTY
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY, FindAllRaspberryPiTTYs, WriteTTY
 
 spectrum_data = []
 smoothed_data = []
 auto_read_enabled = False
 auto_read_thread = None
 
+# serial port handling
+available_ports = []
+selected_port = None
+
 def reset_spectrum_callback():
     print("Resetting spectrum data...")
 
     try:
-        port=FindRaspberryPiTTY()
+        port = selected_port or FindRaspberryPiTTY()
         print(f"Raspberry Pi TTY port found: {port}")
         if not port:
             dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
@@ -28,10 +32,8 @@ def read_spectrum_callback():
     print("Reading spectrum data from TTY...")
     global spectrum_data, smoothed_data
     try:
-
-        port = FindRaspberryPiTTY()
+        port = selected_port or FindRaspberryPiTTY()
         print(f"Raspberry Pi TTY port found: {port}")
-        
         if not port:
             dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
             return
@@ -103,6 +105,25 @@ def toggle_auto_read_callback(sender, value):
     else:
         dpg.set_value("status_text", "Auto-read disabled.")
 
+def update_ports_callback(sender=None, app_data=None):
+    """Refresh the list of available Raspberry Pi serial ports."""
+    global available_ports
+    try:
+        ports = FindAllRaspberryPiTTYs()
+        available_ports = ports
+        dpg.configure_item("port_selector", items=available_ports)
+        if ports:
+            dpg.set_value("port_selector", ports[0])
+            port_selected_callback(None, ports[0])
+        dpg.set_value("status_text", f"Found ports: {ports}")
+    except Exception as e:
+        dpg.set_value("status_text", f"Error scanning ports: {e}")
+
+def port_selected_callback(sender, value):
+    global selected_port
+    selected_port = value
+    dpg.set_value("status_text", f"Selected port: {selected_port}")
+
 def resize_callback(sender, app_data):
     # Get new viewport size
     width, height = dpg.get_viewport_client_width(), dpg.get_viewport_client_height()
@@ -123,6 +144,10 @@ def setup_ui():
             dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
             dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback)
             dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback)
+        # port selection group
+        with dpg.group(horizontal=True):
+            dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector")
+            dpg.add_button(label="Refresh Ports", callback=update_ports_callback)
         dpg.add_text("", tag="status_text")
         with dpg.child_window(width=900, height=600, tag="plot_child"):
             with dpg.plot(label="Spectrum Plot", tag="plot", width=860, height=560):
@@ -146,6 +171,8 @@ def setup_ui():
             dpg.add_file_extension(".*")  # Optional: allow all files
     # Set up viewport resize callback
     dpg.set_viewport_resize_callback(resize_callback)
+    # refresh port list on startup
+    update_ports_callback()
     dpg.setup_dearpygui()
     dpg.show_viewport()
     dpg.start_dearpygui()

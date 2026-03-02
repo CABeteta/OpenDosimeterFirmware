@@ -21,7 +21,7 @@ def WriteTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5, data="Hello, Raspber
     with serial.Serial(port, baudrate, timeout=timeout) as ser:
         ser.write(data.encode())
         print(f"Data written to {port}: {data}")
-        
+
 
 def ReadTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5):
     spectrum = []
@@ -123,48 +123,45 @@ def PlotSpectrumSingle(spectrum, smoothed):
     plt.show()
 
 def FindRaspberryPiTTY():
-    print("ENTERED FindRaspberryPiTTY")
-    
-    """
-    Find the TTY port of a connected Raspberry Pi device.
-    
-    Returns:
-        str: The port name (e.g., '/dev/ttyACM0', '/dev/ttyUSB0'). Returns None if not found.
-    
-    Raises:
-        ImportError: If pyserial is not installed.
+    # keep the old behaviour but now simply select the first from the list
+    ports = FindAllRaspberryPiTTYs()
+    return ports[0] if ports else None
+
+
+def FindAllRaspberryPiTTYs():
+    """Return a list of all serial ports that look like Raspberry Pi devices.
+
+    This uses the same heuristics as :func:`FindRaspberryPiTTY` but does not
+    stop after the first match. An empty list is returned if no ports are found.
     """
     try:
         from serial.tools import list_ports
     except ImportError:
         raise ImportError("pyserial is required. Install it with: pip install pyserial")
-    
-    # Common Raspberry Pi identifiers
+
     rpi_identifiers = [
         'Raspberry Pi',
         'Pico',
-        'CH340',  # Common USB-UART chip used with Pi
-        'CP210x',  # Another common USB-UART chip
-        'FTDI',  # FTDI chips sometimes used
-        'arduino',  # Arduino-compatible RPi boards
+        'CH340',
+        'CP210x',
+        'FTDI',
+        'arduino',
     ]
-    
+
     ports = list_ports.comports()
-    
+    matches = []
+
     for port in ports:
-        # Check if port description contains Raspberry Pi identifiers
         desc_lower = (port.description or '').lower()
         manufacturer_lower = (port.manufacturer or '').lower()
-        
+
         for identifier in rpi_identifiers:
             if identifier.lower() in desc_lower or identifier.lower() in manufacturer_lower:
-                print(port.device)
-                return port.device
-    
-    # If no specific identifier found, return the first available serial port
-    # (commonly /dev/ttyACM0 or /dev/ttyUSB0 for Raspberry Pi Pico/boards)
-    if ports:
-        print("here")
-        return ports[0].device     
-    
-    return None
+                matches.append(port.device)
+                break
+
+    # if no identifiers matched, fall back to returning all available ports
+    if not matches:
+        matches = [p.device for p in ports]
+
+    return matches
