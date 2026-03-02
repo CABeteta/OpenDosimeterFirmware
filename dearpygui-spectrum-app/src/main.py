@@ -111,17 +111,18 @@ def setup_ui():
                 dpg.add_line_series([0], [0], label="Raw Spectrum", tag="raw_series", parent=y_axis)
                 dpg.add_line_series([0], [0], label="Smoothed Spectrum", tag="smoothed_series", parent=y_axis)
         # Add file dialog (hidden by default)
-        dpg.add_file_dialog(
+        
+        with dpg.file_dialog(
+            directory_selector=False,
+            show=False,
             callback=file_dialog_callback,
             tag="file_dialog_id",
-            show=False,  # Initially hidden
             width=700,
             height=500,
-            default_path="."  # Path to open (current directory)
-            # file_count=1,  # Number of files that can be selected
-            # file_extensions=[".txt", ".py", ".md", "*.*"]  # Specify file types (you can add more extensions)
-        )
-    
+        ):
+            # Add file extension filters properly
+            dpg.add_file_extension(".csv", color=(0, 255, 0, 255))
+            dpg.add_file_extension(".*")  # Optional: allow all files
     # Set up viewport resize callback
     dpg.set_viewport_resize_callback(resize_callback)
     dpg.setup_dearpygui()
