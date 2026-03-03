@@ -2,7 +2,7 @@ import dearpygui.dearpygui as dpg
 import datetime
 import threading
 import time
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindRaspberryPiTTY, FindAllRaspberryPiTTYs, WriteTTY
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindAllRaspberryPiTTYs, WriteTTY
 
 spectrum_data = []
 smoothed_data = []
@@ -15,14 +15,11 @@ selected_port = None
 
 def reset_spectrum_callback():
     print("Resetting spectrum data...")
-
     try:
-        port = selected_port or FindRaspberryPiTTY()
-        print(f"Raspberry Pi TTY port found: {port}")
-        if not port:
+        if not selected_port:
             dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
             return
-        WriteTTY(port=port, data="R\n")
+        WriteTTY(port=selected_port, data="R\n")
         dpg.set_value("status_text", "Spectrum reset command sent to TTY.")
     except Exception as e:
         dpg.set_value("status_text", f"Error: {str(e)}")
@@ -32,12 +29,12 @@ def read_spectrum_callback():
     print("Reading spectrum data from TTY...")
     global spectrum_data, smoothed_data
     try:
-        port = selected_port or FindRaspberryPiTTY()
-        print(f"Raspberry Pi TTY port found: {port}")
-        if not port:
+
+        print(f"Raspberry Pi TTY port found: {selected_port}")
+        if not selected_port:
             dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
             return
-        spectrum_data = ReadTTY(port=port)
+        spectrum_data = ReadTTY(port=selected_port)
         smoothed_data = SmoothSpectrum(spectrum_data, window_size=20)
         for i in range(10):
             spectrum_data[i] = 0
@@ -112,12 +109,25 @@ def update_ports_callback(sender=None, app_data=None):
         ports = FindAllRaspberryPiTTYs()
         available_ports = ports
         dpg.configure_item("port_selector", items=available_ports)
-        if ports:
+        if ports: # if we found any ports, select the first one by default
             dpg.set_value("port_selector", ports[0])
             port_selected_callback(None, ports[0])
-        dpg.set_value("status_text", f"Found ports: {ports}")
+            dpg.set_value("status_text", f"Found ports: {ports}")
+            dpg.configure_item("ReadSpectrum", enabled=True)
+            dpg.configure_item("auto_read_checkbox", enabled=True)
+            dpg.configure_item("ResetSpectrum", enabled=True)
+        else:
+            dpg.set_value("status_text", "No Raspberry Pi ports found.")
+            # We gray out the port selector if no ports are found. We also clear any old ports from the list and disable the "Read Spectrum" button to prevent errors.
+            dpg.set_value("port_selector", "")
+            dpg.configure_item("port_selector", items=[])
+            dpg.configure_item("ReadSpectrum", enabled=False)
+            dpg.configure_item("auto_read_checkbox", enabled=False)
+            dpg.configure_item("ResetSpectrum", enabled=False)
+
     except Exception as e:
         dpg.set_value("status_text", f"Error scanning ports: {e}")
+
 
 def port_selected_callback(sender, value):
     global selected_port
@@ -138,12 +148,12 @@ def setup_ui():
     
     with dpg.window(label="Spectrum App", width=900, height=700, tag="main_window"):
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback)
+            dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback, tag="ReadSpectrum")
             dpg.add_button(label="Load Spectrum", callback=load_spectrum_callback)
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
             dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
-            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback)
-            dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback)
+            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
+            dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
         # port selection group
         with dpg.group(horizontal=True):
             dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector")

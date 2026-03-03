@@ -122,12 +122,6 @@ def PlotSpectrumSingle(spectrum, smoothed):
     plt.tight_layout()
     plt.show()
 
-def FindRaspberryPiTTY():
-    # keep the old behaviour but now simply select the first from the list
-    ports = FindAllRaspberryPiTTYs()
-    return ports[0] if ports else None
-
-
 def FindAllRaspberryPiTTYs():
     """Return a list of all serial ports that look like Raspberry Pi devices.
 
@@ -159,9 +153,8 @@ def FindAllRaspberryPiTTYs():
             if identifier.lower() in desc_lower or identifier.lower() in manufacturer_lower:
                 matches.append(port.device)
                 break
-
-    # if no identifiers matched, fall back to returning all available ports
     if not matches:
-        matches = [p.device for p in ports]
-
+        print("No Raspberry Pi TTY ports found.")
+        return []
+    
     return matches
