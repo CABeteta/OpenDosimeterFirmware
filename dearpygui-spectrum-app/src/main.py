@@ -2,10 +2,12 @@ import dearpygui.dearpygui as dpg
 import datetime
 import threading
 import time
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindAllRaspberryPiTTYs, WriteTTY
+import serial
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindAllRaspberryPiTTYs, WriteTTY, ReadCPS
 
 spectrum_data = []
 smoothed_data = []
+port_response = ""
 auto_read_enabled = False
 auto_read_thread = None
 
@@ -24,9 +26,33 @@ def reset_spectrum_callback():
     except Exception as e:
         dpg.set_value("status_text", f"Error: {str(e)}")
 
+def readspectrum_and_readcps_callback():
+    read_spectrum_callback()
+    plot_spectrum_callback()
+    read_cps_callback()
+    
+
+
+def read_cps_callback():
+    """Send 'C' and read the immediate response, displaying it in the UI."""
+    try:
+        port = selected_port
+        if not port:
+            dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
+            return
+        resp = ReadCPS(port=port, data="C\n")
+        if resp:
+            dpg.set_value("status_text", "Received response from port.")
+            dpg.set_value("port_response", resp)
+            
+        else:
+            dpg.set_value("status_text", "No response received (timeout).")
+            dpg.set_value("port_response", "")
+    except Exception as e:
+        dpg.set_value("status_text", f"Error: {str(e)}")
 
 def read_spectrum_callback():
-    print("Reading spectrum data from TTY...")
+    print("Reading spectrum data from TTY")
     global spectrum_data, smoothed_data
     try:
 
@@ -87,8 +113,8 @@ def load_spectrum_callback():
     dpg.show_item("file_dialog_id")
 
 def auto_read_loop():
-    while auto_read_enabled:
-        read_spectrum_callback()
+    while auto_read_enabled:        
+        readspectrum_and_readcps_callback()
         plot_spectrum_callback()
         time.sleep(3)
 
@@ -148,17 +174,22 @@ def setup_ui():
     
     with dpg.window(label="Spectrum App", width=900, height=700, tag="main_window"):
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback, tag="ReadSpectrum")
+            #dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback, tag="ReadSpectrum")            
+            dpg.add_button(label="Read spectrum and cps", callback=readspectrum_and_readcps_callback)
+            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
             dpg.add_button(label="Load Spectrum", callback=load_spectrum_callback)
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
-            dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
-            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
+            #dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)       
+            dpg.add_spacer(width=30)      
             dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
         # port selection group
         with dpg.group(horizontal=True):
-            dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector")
+            dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector", width=300)
             dpg.add_button(label="Refresh Ports", callback=update_ports_callback)
+            dpg.add_spacer(width=40) 
+            dpg.add_input_text(label="cps", tag="port_response", multiline=True, readonly=True, width=150, height=20)
         dpg.add_text("", tag="status_text")
+            
         with dpg.child_window(width=900, height=600, tag="plot_child"):
             with dpg.plot(label="Spectrum Plot", tag="plot", width=860, height=560):
                 dpg.add_plot_legend(location=dpg.mvPlot_Location_NorthEast)
