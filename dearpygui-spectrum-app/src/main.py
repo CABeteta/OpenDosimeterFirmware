@@ -2,12 +2,16 @@ import dearpygui.dearpygui as dpg
 import datetime
 import threading
 import time
-from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindAllRaspberryPiTTYs, WriteTTY
+import serial
+from spectrum import ReadTTY, SmoothSpectrum, SaveSpectrumToCSV, FindAllRaspberryPiTTYs, WriteTTY, ReadCPS
 
 spectrum_data = []
 smoothed_data = []
+port_response = ""
 auto_read_enabled = False
 auto_read_thread = None
+global running
+running = False
 
 # serial port handling
 available_ports = []
@@ -24,9 +28,31 @@ def reset_spectrum_callback():
     except Exception as e:
         dpg.set_value("status_text", f"Error: {str(e)}")
 
+def readspectrum_and_readcps_callback():
+    read_spectrum_callback()
+    plot_spectrum_callback()
+    read_cps_callback()
+    
+def read_cps_callback():
+    """Send 'C' and read the immediate response, displaying it in the UI."""
+    try:
+        port = selected_port
+        if not port:
+            dpg.set_value("status_text", "Error: Raspberry Pi port not found.")
+            return
+        resp = ReadCPS(port=port, data="C\n")
+        if resp:
+            dpg.set_value("status_text", "Received response from port.")
+            dpg.set_value("port_response", resp)
+            
+        else:
+            dpg.set_value("status_text", "No response received (timeout).")
+            dpg.set_value("port_response", "")
+    except Exception as e:
+        dpg.set_value("status_text", f"Error: {str(e)}")
 
 def read_spectrum_callback():
-    print("Reading spectrum data from TTY...")
+    print("Reading spectrum data from TTY")
     global spectrum_data, smoothed_data
     try:
 
@@ -61,7 +87,12 @@ def save_csv_callback():
     try:
         if spectrum_data and smoothed_data:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"spectrum_{timestamp}.csv"
+            #filename = f"spectrum_{timestamp}.csv"
+            #get file name from output file input
+            output_file = dpg.get_value("output_file")
+            if output_file:
+                filename = f"{output_file}_{timestamp}.csv"
+            else:                filename = f"spectrum_{timestamp}.csv"
             SaveSpectrumToCSV(spectrum_data, smoothed_data, filename)
             dpg.set_value("status_text", f"Spectrum data saved to {filename}.")
         else:
@@ -86,15 +117,15 @@ def file_dialog_callback(sender, app_data):
 def load_spectrum_callback():
     dpg.show_item("file_dialog_id")
 
-def auto_read_loop():
-    while auto_read_enabled:
-        read_spectrum_callback()
+def auto_read_loop():    
+    while auto_read_enabled:                
+        readspectrum_and_readcps_callback()
         plot_spectrum_callback()
         time.sleep(3)
 
 def toggle_auto_read_callback(sender, value):
     global auto_read_enabled, auto_read_thread
-    auto_read_enabled = value
+    auto_read_enabled = value    
     if value:
         dpg.set_value("status_text", "Auto-read enabled (3 second interval).")
         auto_read_thread = threading.Thread(target=auto_read_loop, daemon=True)
@@ -142,23 +173,73 @@ def resize_callback(sender, app_data):
     dpg.configure_item("plot_child", width=width, height=height-60)  # leave space for buttons/text
     dpg.configure_item("plot", width=width-40, height=height-100)    # leave space for legend/axes
 
+def startcapture_callback():
+        #This button will start a timed capture process that continuously reads spectrum and cps data, updates the plot, and saves to CSV at the end.
+        # The button label will show the remaining time during capture. The capture can be stopped manually by clicking the button again.
+        global running
+        if not running:
+            dpg.set_value("status_text", "Starting capture...")
+            running = True
+            threading.Thread(target=capture_process, daemon=True).start()
+        else:
+            dpg.set_value("status_text", "Stopping capture...")
+            running = False
+        
+# Capture process in a separate thread
+def capture_process():
+    global running
+    input_value = dpg.get_value("minsec") # Get the duration value from the input field  
+    try: # Make sure the input is in the correct format (min:sec)
+        minutes, seconds = map(int, input_value.split(':'))
+    except ValueError:
+        dpg.set_value("status_text", "Invalid input format. Please enter time as min:sec (e.g., 1:30).")
+        return
+    
+    reset_spectrum_callback()  # reset spectrum before starting capture
+    toggle_auto_read_callback(None, running)  # Enable auto-read to continuously update spectrum and CPS
+    start_time = time.time()
+    total_seconds = minutes * 60 + seconds
+
+    while time.time() - start_time < total_seconds:
+        if running==False:                        
+            break
+        # Here you would read from the serial port and update the spectrum data as needed.                                                        
+        dpg.set_item_label("start_capture_button", f"{total_seconds-time.time()+start_time:.0f} s")
+        time.sleep(1)  # Sleep briefly to avoid busy-waiting
+    else: # This else block executes if the while loop completes without a break (i.e., capture duration is complete)
+        save_csv_callback()  # Save the spectrum data to CSV after capture is complete
+        dpg.set_value("status_text", "Capture complete.")
+    toggle_auto_read_callback(None,False)  # Disable auto-read after capture is complete
+    running = False
+    dpg.set_item_label("start_capture_button", "START")              
+    
 def setup_ui():
     dpg.create_context()
     dpg.create_viewport(title='Spectrum Reader', width=900, height=700)
     
     with dpg.window(label="Spectrum App", width=900, height=700, tag="main_window"):
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback, tag="ReadSpectrum")
+            #dpg.add_button(label="Read Spectrum", callback=read_spectrum_callback, tag="ReadSpectrum")            
+            dpg.add_button(label="Read spectrum and cps", callback=readspectrum_and_readcps_callback)
+            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
             dpg.add_button(label="Load Spectrum", callback=load_spectrum_callback)
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
-            dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)
-            dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
+            #dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)       
+            dpg.add_spacer(width=20)      
             dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
+            dpg.add_spacer(width=40)  
+            dpg.add_input_text(label="min:sec", tag="minsec", width=50)                      
+            dpg.add_button(label="START", tag="start_capture_button", callback=startcapture_callback,width=80)
         # port selection group
         with dpg.group(horizontal=True):
-            dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector")
+            dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector", width=300)
             dpg.add_button(label="Refresh Ports", callback=update_ports_callback)
+            dpg.add_spacer(width=25) 
+            dpg.add_input_text(label="cps", tag="port_response", multiline=True, readonly=True, width=130, height=20)
+            dpg.add_spacer(width=10) 
+            dpg.add_input_text(label="Output file", tag="output_file", width=120, height=20)
         dpg.add_text("", tag="status_text")
+            
         with dpg.child_window(width=900, height=600, tag="plot_child"):
             with dpg.plot(label="Spectrum Plot", tag="plot", width=860, height=560):
                 dpg.add_plot_legend(location=dpg.mvPlot_Location_NorthEast)

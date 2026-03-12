@@ -5,6 +5,7 @@ import serial
 import psutil
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 def WriteTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5, data="Hello, Raspberry Pi!"):
     if not os.path.exists(port):
@@ -22,7 +23,30 @@ def WriteTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5, data="Hello, Raspber
         ser.write(data.encode())
         print(f"Data written to {port}: {data}")
 
+def ReadCPS(port='/dev/ttyACM0', data="C\n", baudrate=9600, write_timeout=5, read_timeout=1):
+    """Write to a port and return any lines received within a timeout.
 
+    The write uses :func:`WriteTTY` to leverage its safety checks.  After the
+    data is written the port is opened again for up to ``read_timeout``
+    seconds to collect any response lines, which are joined by ``\n``.
+    """
+    # perform the write with existing helper. writes a C to read the cps
+    WriteTTY(port=port, baudrate=baudrate, timeout=write_timeout, data=data)
+    responses = []
+    start = time.time()
+    with serial.Serial(port, baudrate, timeout=0.5) as ser:
+        while time.time() - start < read_timeout:
+            line = ser.readline().decode(errors='ignore').strip()
+            if line:
+                 #write again a C to stop the counting
+                WriteTTY(port=port, baudrate=baudrate, timeout=write_timeout, data=data)
+                responses=line
+                return responses
+   
+    
+   
+    
+    
 def ReadTTY(port='/dev/ttyACM0', baudrate=9600, timeout=5):
     spectrum = []
     if not os.path.exists(port):
@@ -153,8 +177,8 @@ def FindAllRaspberryPiTTYs():
             if identifier.lower() in desc_lower or identifier.lower() in manufacturer_lower:
                 matches.append(port.device)
                 break
+    # If no identified matches, return an empty list
     if not matches:
-        print("No Raspberry Pi TTY ports found.")
         return []
-    
+
     return matches
