@@ -60,52 +60,74 @@ Channel,Raw,Smoothed
 
 def import_old_csv(input_file_path="/home/cabellan/Code/Med/OpenDosimeterFirmware/Data/SpectrumTecnetium_05Cm.csv", output_file_path="/home/cabellan/Code/Med/OpenDosimeterFirmware/Data/new/SpectrumTecnetium_05Cm_new.csv"):
     try:
+        data = []
+        reading_cps = False
+        reading_spectrum = False
+        spectrum_found = False
         with open(input_file_path, mode='r') as file:
-            reader = csv.reader(file)
-            data = []
-            # We start reading lines after we see the "CPS printing enabled" line, and stop when we see "CPS printing disabled".
-            reading_cps = False
-            for row in reader:
-                if len(row) == 0:
+            first_non_empty_line = None
+            for raw_line in file:
+                stripped_line = raw_line.strip()
+                if not stripped_line:
                     continue
-                line = row[0]
+                first_non_empty_line = stripped_line
+                break
+            if first_non_empty_line:
+                normalized_header = first_non_empty_line.replace(" ", "").lower()
+                if normalized_header.startswith("channel,raw,smoothed"):
+                    print(f"Warning: input file '{input_file_path}' appears to already be in new format. Skipping re-import.")
+                    return None
+            file.seek(0)
+            for raw_line in file:
+                line = raw_line.rstrip('\n')
+                if not line: # skip empty lines
+                    continue
+
+                # CPS markers
                 if "CPS printing enabled" in line:
                     reading_cps = True
                     print("CPS present:")
                     continue
-                elif "CPS printing disabled" in line:
+                if "CPS printing disabled" in line:
+                    if reading_cps:
+                        print("CPS ended.")
                     reading_cps = False
-                    print("CPS ended.")
-                    break # Once CPS is over we continue
+                    continue
                 if reading_cps:
                     print(line)
-            # From here we look for the spectrum data between the "---Spectrum Log Start" and "---Spectrum Log End" lines, with a header line "ADC_BIN,COUNT". Each subsequent line contains the ADC bin number and the count for that bin, separated by a comma.
-            reading_spectrum = False
-            for row in reader:
-                if len(row) == 0: # Skip empty lines
-                    continue
 
-                line = row
+                # Spectrum markers
                 if "---Spectrum Log Start" in line:
                     reading_spectrum = True
+                    spectrum_found = True
                     print("Spectrum data found:")
                     continue
-                elif "---Spectrum Log End" in line:
+                if "---Spectrum Log End" in line:
+                    if reading_spectrum:
+                        print("Spectrum data ended.")
                     reading_spectrum = False
-                    print("Spectrum data ended.")
-                    break
+                    # Keep scanning in case more useful data appears later
+                    continue
+
+                # If we're inside the spectrum block, parse CSV-like lines
                 if reading_spectrum:
-                    print(line)
-                    # The lines we receive are in format [ADC_BIN,COUNT]
-                    # We need to make sure the header does not get included in the data. We can identify it by looking for the "ADC_BIN,COUNT" line.
-                    if line[0] == "ADC_BIN" and line[1] == "COUNT":
+                    # Skip header line if present
+                    if line.strip() == "ADC_BIN,COUNT":
+                        continue
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) < 2:
                         continue
                     try:
-                        adc_bin = int(line[0])
-                        count = int(line[1])
+                        adc_bin = int(parts[0])
+                        count = int(parts[1])
                         data.append((adc_bin, count))
                     except ValueError:
+                        # ignore non-numeric lines inside spectrum block
                         continue
+
+        if not spectrum_found or len(data) == 0:
+            print("No spectrum data found in the file.")
+            return None
     except Exception as e:
         print(f"Error importing CSV: {str(e)}")
         return None
