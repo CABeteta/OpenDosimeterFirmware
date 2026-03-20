@@ -28,6 +28,65 @@ def reset_spectrum_callback():
     except Exception as e:
         dpg.set_value("status_text", f"Error: {str(e)}")
 
+def save_spectrum_picture_callback():
+    try:
+        if not spectrum_data and not smoothed_data:
+            dpg.set_value("status_text", "No spectrum data loaded. Cannot save image.")
+            return
+
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            dpg.set_value("status_text", "Error: matplotlib is required to save spectrum images.")
+            return
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"spectrum_plot_{timestamp}.png"
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        if spectrum_data:
+            x = list(range(len(spectrum_data)))
+            ax.plot(x, spectrum_data, label="Raw Spectrum", color="tab:blue")
+
+        if smoothed_data:
+            x2 = list(range(len(smoothed_data)))
+            ax.plot(x2, smoothed_data, label="Smoothed Spectrum", color="tab:orange")
+
+        # We compose the title with the output file name if provided, otherwise we just use "Spectrum"
+        output_file = dpg.get_value("output_file")
+        if output_file:
+            ax.set_title(f"Spectrum - {output_file}")
+        else:
+            ax.set_title("Spectrum")
+
+        ax.set_xlabel("Channel")
+        ax.set_ylabel("Counts")
+
+        # Preserve the same visible axis limits from the DearPyGui plot
+        try:
+            x_limits = dpg.get_axis_limits("x_axis")
+            y_limits = dpg.get_axis_limits("y_axis")
+            if x_limits and len(x_limits) >= 2:
+                ax.set_xlim(x_limits[0], x_limits[1])
+            if y_limits and len(y_limits) >= 2:
+                ax.set_ylim(y_limits[0], y_limits[1])
+        except Exception:
+            # Fallback if axis limits are unavailable
+            pass
+
+        ax.legend()
+        ax.grid(True)
+        fig.tight_layout()
+
+        fig.savefig(filename)
+        plt.close(fig)
+
+        dpg.set_value("status_text", f"Spectrum plot saved as {filename}.")
+
+    except Exception as e:
+        dpg.set_value("status_text", f"Error: {str(e)}")
+
 def readspectrum_and_readcps_callback():
     read_spectrum_callback()
     plot_spectrum_callback()
@@ -224,6 +283,7 @@ def setup_ui():
             dpg.add_button(label="Reset Spectrum", callback=reset_spectrum_callback, tag="ResetSpectrum")
             dpg.add_button(label="Load Spectrum", callback=load_spectrum_callback)
             dpg.add_button(label="Save CSV", callback=save_csv_callback)
+            dpg.add_button(label="Save Spectrum Picture", callback=save_spectrum_picture_callback)
             #dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)       
             dpg.add_spacer(width=20)      
             dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
