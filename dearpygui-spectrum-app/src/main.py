@@ -10,12 +10,47 @@ smoothed_data = []
 port_response = ""
 auto_read_enabled = False
 auto_read_thread = None
+auto_cycle_enabled = False
+auto_cycle_thread = None
+auto_cycle_deadline = None
 global running
 running = False
 
 # serial port handling
 available_ports = []
 selected_port = None
+
+
+def format_countdown(total_seconds):
+    total_seconds = max(0, int(total_seconds))
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def parse_min_sec(value):
+    text = str(value).strip()
+    if not text:
+        raise ValueError("Time value is empty.")
+
+    if ":" in text:
+        parts = text.split(":")
+        if len(parts) != 2:
+            raise ValueError("Use format min:sec, for example 5:00.")
+        minutes, seconds = parts
+        minutes = int(minutes)
+        seconds = int(seconds)
+    else:
+        minutes = int(float(text))
+        seconds = 0
+
+    if minutes < 0 or seconds < 0 or seconds >= 60:
+        raise ValueError("Use format min:sec with seconds between 0 and 59.")
+
+    return minutes * 60 + seconds
+
 
 def reset_spectrum_callback():
     print("Resetting spectrum data...")
@@ -192,6 +227,74 @@ def toggle_auto_read_callback(sender, value):
     else:
         dpg.set_value("status_text", "Auto-read disabled.")
 
+
+def auto_cycle_loop():
+    global auto_cycle_enabled, auto_cycle_deadline
+    while auto_cycle_enabled:
+        try:
+            interval_seconds = parse_min_sec(dpg.get_value("auto_cycle_minutes"))
+            if interval_seconds <= 0:
+                dpg.set_value("status_text", "Auto-cycle interval must be greater than 0 seconds.")
+                auto_cycle_enabled = False
+                auto_cycle_deadline = None
+                dpg.set_value("auto_cycle_remaining", "00:00")
+                dpg.set_item_label("auto_cycle_button", "AUTO START")
+                break
+
+            if auto_cycle_deadline is None:
+                auto_cycle_deadline = time.time() + interval_seconds
+
+            remaining = max(0, auto_cycle_deadline - time.time())
+            dpg.set_value("auto_cycle_remaining", format_countdown(remaining))
+
+            if remaining <= 0:
+                if not running:
+                    dpg.set_value("status_text", f"Scheduled capture triggered every {format_countdown(interval_seconds)}.")
+                    startcapture_callback()
+                auto_cycle_deadline = time.time() + interval_seconds
+                continue
+
+            time.sleep(1)
+        except Exception as e:
+            dpg.set_value("status_text", f"Error in auto-cycle: {str(e)}")
+            auto_cycle_enabled = False
+            auto_cycle_deadline = None
+            dpg.set_value("auto_cycle_remaining", "00:00")
+            dpg.set_item_label("auto_cycle_button", "AUTO START")
+            break
+
+
+def toggle_auto_cycle_callback():
+    global auto_cycle_enabled, auto_cycle_thread, auto_cycle_deadline
+
+    if not auto_cycle_enabled:
+        try:
+            interval_seconds = parse_min_sec(dpg.get_value("auto_cycle_minutes"))
+            if interval_seconds <= 0:
+                raise ValueError("Interval must be greater than 0 seconds.")
+
+            auto_cycle_enabled = True
+            auto_cycle_deadline = time.time() + interval_seconds
+            dpg.set_value("auto_cycle_remaining", format_countdown(interval_seconds))
+            dpg.set_item_label("auto_cycle_button", "AUTO STOP")
+            dpg.set_value("status_text", f"Auto-cycle started every {format_countdown(interval_seconds)}.")
+
+            if not running:
+                dpg.set_value("status_text", f"Auto-cycle started. First capture begins immediately.")
+                startcapture_callback()
+
+            auto_cycle_thread = threading.Thread(target=auto_cycle_loop, daemon=True)
+            auto_cycle_thread.start()
+        except Exception as e:
+            dpg.set_value("status_text", f"Invalid auto-cycle interval: {str(e)}")
+    else:
+        auto_cycle_enabled = False
+        auto_cycle_deadline = None
+        dpg.set_value("auto_cycle_remaining", "00:00")
+        dpg.set_item_label("auto_cycle_button", "AUTO START")
+        dpg.set_value("status_text", "Auto-cycle stopped.")
+
+
 def update_ports_callback(sender=None, app_data=None):
     """Refresh the list of available Raspberry Pi serial ports."""
     global available_ports
@@ -286,10 +389,20 @@ def setup_ui():
             dpg.add_button(label="Save Spectrum Picture", callback=save_spectrum_picture_callback)
             #dpg.add_button(label="Plot Spectrum", callback=plot_spectrum_callback)       
             dpg.add_spacer(width=20)      
-            dpg.add_checkbox(label="Auto-Read (3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
-            dpg.add_spacer(width=40)  
-            dpg.add_input_text(label="min:sec", tag="minsec", width=50)                      
+            dpg.add_checkbox(label="Auto-Read(3s)", callback=toggle_auto_read_callback, tag="auto_read_checkbox")
+            dpg.add_spacer(width=15)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Capture")
+                dpg.add_input_text(tag="minsec", width=70, default_value="0:30")
             dpg.add_button(label="START", tag="start_capture_button", callback=startcapture_callback,width=80)
+            dpg.add_spacer(width=15)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Every")
+                dpg.add_input_text(tag="auto_cycle_minutes", width=70, default_value="5:00")
+            with dpg.group(horizontal=True):
+                dpg.add_text("Next in")
+                dpg.add_input_text(tag="auto_cycle_remaining", width=70, default_value="00:00", readonly=True)
+            dpg.add_button(label="AUTO START", tag="auto_cycle_button", callback=toggle_auto_cycle_callback, width=100)
         # port selection group
         with dpg.group(horizontal=True):
             dpg.add_combo(items=available_ports, label="Port", callback=port_selected_callback, tag="port_selector", width=300)
