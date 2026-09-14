@@ -95,9 +95,21 @@ def LoadSpectrumFromCSV(filename):
     spectrum = []
     smoothed = []
     with open(filename, 'r') as f:
-        next(f)  # Skip header
         for line in f:
-            parts = line.strip().split(',')
+            line = line.strip()
+            if not line:
+                continue
+            if line.lower().startswith('timestamp,'):
+                continue
+            if line.lower().startswith('duration,'):
+                continue
+            if line.lower().startswith('cps,'):
+                continue
+            if line.lower().startswith('deadtime,'):
+                continue
+            if line.lower().startswith('channel,'):
+                continue
+            parts = line.split(',')
             if len(parts) == 3:
                 try:
                     spectrum.append(int(parts[1]))
@@ -110,8 +122,29 @@ def LoadSpectrumFromCSV(filename):
                 smoothed.append(0)
     return spectrum, smoothed
 
-def SaveSpectrumToCSV(spectrum, smoothed, filename):
+
+def SaveSpectrumToCSV(spectrum, smoothed, filename, timestamp=None, duration_seconds=None, cps_value=None, deadtime_value=None):
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if duration_seconds is None:
+        duration_seconds = 0
+    if cps_value is None:
+        cps_value = ""
+    if deadtime_value is None:
+        deadtime_value = ""
+
+    minutes, seconds = divmod(int(duration_seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        duration_label = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    else:
+        duration_label = f"{minutes:02d}:{seconds:02d}"
+
     with open(filename, 'w') as f:
+        f.write(f"# Timestamp,{timestamp}\n")
+        f.write(f"# Duration,{duration_label}\n")
+        f.write(f"# CPS,{cps_value}\n")
+        f.write(f"# Deadtime,{deadtime_value}\n")
         f.write("Channel,Raw,Smoothed\n")
         for i in range(4096):
             f.write(f"{i},{spectrum[i]},{smoothed[i]}\n")

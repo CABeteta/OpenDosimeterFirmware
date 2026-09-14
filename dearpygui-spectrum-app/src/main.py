@@ -181,13 +181,24 @@ def save_csv_callback():
     try:
         if spectrum_data and smoothed_data:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            #filename = f"spectrum_{timestamp}.csv"
-            #get file name from output file input
+            readable_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            duration_seconds = parse_min_sec(dpg.get_value("minsec"))
+            port_response_value = dpg.get_value("port_response")
+            cps_value = ""
+            deadtime_value = ""
+            if port_response_value:
+                parts = str(port_response_value).strip().split()
+                if len(parts) >= 2:
+                    cps_value = parts[0]
+                    deadtime_value = parts[1]
+                else:
+                    cps_value = port_response_value
             output_file = dpg.get_value("output_file")
             if output_file:
                 filename = f"{output_file}_{timestamp}.csv"
-            else:                filename = f"spectrum_{timestamp}.csv"
-            SaveSpectrumToCSV(spectrum_data, smoothed_data, filename)
+            else:
+                filename = f"spectrum_{timestamp}.csv"
+            SaveSpectrumToCSV(spectrum_data, smoothed_data, filename, readable_timestamp, duration_seconds, cps_value, deadtime_value)
             dpg.set_value("status_text", f"Spectrum data saved to {filename}.")
         else:
             dpg.set_value("status_text", "No spectrum data to save.")
